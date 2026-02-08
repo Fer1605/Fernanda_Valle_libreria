@@ -1,29 +1,39 @@
 def call(Map config = [:]) {
-  // 1) Parámetro requerido: abortPipeline (por defecto false)
   boolean abortPipeline = (config.get('abortPipeline', false) as boolean)
 
-  echo "== Static Analysis: inicio =="
+  echo "== Static Analysis (heurística por rama) =="
 
-  // 2) Sustitución del análisis real por un echo (requisito del enunciado)
+  // Enunciado: sustituir ejecución real por echo
   sh 'echo "Ejecución de las pruebas de calidad de código"'
 
-  // 3) Simulación de Quality Gate usando variable de entorno
+  // Simulación del Quality Gate: variable de entorno
   String qgStatus = (env.QUALITY_GATE_STATUS ?: 'OK').toString().trim().toUpperCase()
 
-  // 4) Timeout máximo 5 minutos (requisito del enunciado)
+  // Detectar rama desde variables típicas de Jenkins
+  String branchName = (env.BRANCH_NAME ?: env.GIT_BRANCH ?: 'unknown').toString()
+  branchName = branchName.replace('origin/', '').trim()
+
+  // Enunciado: timeout máximo 5 minutos
   timeout(time: 5, unit: 'MINUTES') {
     echo "Esperando resultado del QualityGate (simulado)..."
     sh 'sleep 2'
   }
 
   echo "QualityGate (simulado) => ${qgStatus}"
+  echo "Rama detectada => ${branchName}"
+  echo "abortPipeline => ${abortPipeline}"
 
-  // 5) Si falla y abortPipeline=true, aborta. Si abortPipeline=false, continúa
+  // Regla: decidir si abortar cuando falle el quality gate
+  boolean shouldAbortOnFail =
+    abortPipeline ||
+    branchName == 'master' ||
+    branchName.startsWith('hotfix')
+
   if (qgStatus != 'OK') {
-    if (abortPipeline) {
-      error("QualityGate falló y abortPipeline=true => abortando pipeline.")
+    if (shouldAbortOnFail) {
+      error("QualityGate falló y la heurística indica ABORTAR (branch=${branchName}).")
     } else {
-      echo "QualityGate falló pero abortPipeline=false => el pipeline continúa."
+      echo "QualityGate falló pero la heurística indica CONTINUAR (branch=${branchName})."
     }
   }
 
